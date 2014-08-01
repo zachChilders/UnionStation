@@ -1,3 +1,4 @@
+#! /bin/bash
 make
 sudo insmod unionstation.ko
 sudo cat /var/log/messages | tail
