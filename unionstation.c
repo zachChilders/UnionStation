@@ -22,10 +22,44 @@ struct device
 	struct semaphore sem;
 }char_arr;
 
+//Dummy function to test threading
 void math(int a)
 {
 	printk(KERN_INFO "In math thread");
 	char_arr.result =  a + a;
+}
+
+//Handle file openings
+struct file* file_open(const char* path, int flags, int rights)
+{
+	struct file* filp = NULL;
+	mm_segment_t oldfs;
+	int err = 0;
+
+	oldfs = get_fs();
+	set_fs(get_ds());
+	filp = file_open(path, flags, rights);
+	set_fs(oldfs);
+	if (IS_ERR(filp))
+	{
+		err = PIR_ERR(filp);
+		return NULL;
+	}
+	return filp;
+}
+
+//File closing
+void file_close(struct file* file)
+{
+	filp_close(file, NULL);
+}
+
+//Writing out
+int file_write(struct file* file, unsigned long long offset, unsigned char* data, unsigned int size)
+{
+
+
+
 }
 
 //Grab the semaphore
@@ -54,6 +88,7 @@ ssize_t read( struct file *filp, int* buff, size_t count, loff_t* offset)
 	return ret;
 }
 
+//Writing to buffer
 ssize_t write( struct file *filp, const int *buff, size_t count, loff_t *offp)
 {
 	unsigned long ret;
@@ -89,7 +124,7 @@ struct file_operations fops = {
 	//ioctl
 };
 
-int char_arr_init (void)
+int __init char_arr_init (void)
 {
 	int ret;
 	dev_t dev_no, dev;
@@ -119,15 +154,6 @@ int char_arr_init (void)
 	return 0;
 }
 
-static void __exit char_arr_cleanup(void)
-{
-
-	printk(KERN_INFO " Inside cleanup_module\n");
-	up(&char_arr.sem);
-	cdev_del(kernel_cdev);
-	unregister_chrdev_region(Major, 1);
-}
-
 static void __exit char_arr_exit(void)
 {
 
@@ -140,5 +166,3 @@ MODULE_LICENSE("GPL");
 
 module_init(char_arr_init);
 module_exit(char_arr_exit);
-static void module_cleanup(char_arr_cleanup);
-
