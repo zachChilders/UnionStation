@@ -1,0 +1,1 @@
+cmd_/home/zach/Desktop/UnionStation/unionstation2.ko := ld -r -m elf_x86_64 -T /usr/src/kernels/3.15.8-200.fc20.x86_64/scripts/module-common.lds --build-id  -o /home/zach/Desktop/UnionStation/unionstation2.ko /home/zach/Desktop/UnionStation/unionstation2.o /home/zach/Desktop/UnionStation/unionstation2.mod.o

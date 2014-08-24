@@ -1,80 +1,132 @@
-/*
- * unionstation.c 
- */
-
 #include <linux/module.h>
 #include <linux/kernel.h>
-#include <linux/proc_fs.h>
+#include <linux/fs.h>
 
-#define procfs_name "unionstation"
+#include <asm/uaccess.h>
 
-#define DRIVER_AUTHOR "Zach Childers"
-#define DRIVER_DESC "Hello world"
+#include <linux/semaphore.h>
+#include <linux/cdev.h>
+static int Major;
 
-
-struct proc_dir_entry *Our_Proc_File;
-
-static int procfile_read(char *buffer, char **buffer_location,
-					off_t offset, int buffer_length, int *eof, void *data)
+struct device
 {
-	int ret;
+	char array[100];
+	int one;
+	int two;
+	int result;
+	struct semaphore sem;
+}char_arr;
 
-	printk(KERN_INFO "procfile_read (/proc/%s) called\n", procfs_name);
 
-	if (offset > 0)
+//Grab the semaphore
+int open(struct inode *inode, struct file *filp)
+{
+	if (down_interruptible(&char_arr.sem)) //Try to hold the sema/phore
 	{
-		ret = 0;
+		printk(KERN_INFO " could not hold semaphore.");
+		return -1;
 	}
-	else
-	{
-		ret = sprintf(buffer, "HelloWorld!\n");
-	}
+
+	return 0;
+	
+}
+
+//read from the buffer
+ssize_t read( struct file *filp, int* buff, size_t count, loff_t* offset)
+{
+	unsigned long ret;
+	printk("Inside read \n");
+	char_arr.result = char_arr.one + char_arr.two;
+	printk("Result: %d \n", char_arr.result);
+	ret = copy_to_user(buff, &char_arr.result, count);
+	return ret;
+}
+
+ssize_t write( struct file *filp, const int *buff, size_t count, loff_t *offp)
+{
+	unsigned long ret;
+	printk(KERN_INFO "Inside write\n");
+	int* tmp;
+	ret = copy_from_user(&tmp, buff, count);
+	printk("Copied %d", tmp);
+	char_arr.one = tmp;
+	char_arr.two = tmp;
 	return ret;
 
 }
 
-static int __init union_station_init(void)
+int release(struct inode *inode, struct file *filp)
 {
- 	printk (KERN_INFO "Hello \n");
- 	Our_Proc_File = create_proc_entry(procfs_name, 0644, NULL);
- 
- 	if (Our_Proc_File == NULL)
- 	{
- 		remove_proc_entry(procfs_name, &proc_root);
- 		printk(KERN_ALERT "Error: Could not initialize /proc/%s\n",
- 			procfs_name);
- 		return -ENOMEM;
- 	}
-
- 	Our_Proc_File->read_proc = procfile_read;
- 	Our_Proc_File->owner = THIS_MODULE;
- 	Our_Proc_File->mode = S_IFREG | S_IRUGO;
- 	Our_Proc_File->uid = 0;
- 	Our_Proc_File->gid = 0;
- 	Our_Proc_File->size = 37;
-
- 	printk(KERN_INFO "/proc/%s created\n", procfs_name);
-
- 	return 0;
+	printk (KERN_INFO "Inside close \n");
+	printk (KERN_INFO "Releasing semaphore\n");
+	up(&char_arr.sem);
+	return 0;
 }
 
-static void __exit union_station_exit(void)
-{
- 	printk(KERN_INFO "Goodbye\n");
- 	remove_proc_entry(procfs_name, &proc_root);
+//?
+struct cdev *kernel_cdev;
 
+//Struct for file operations supported by module
+struct file_operations fops = { 
+	read: read, 
+	write: write, 
+	open: open, 
+	release: release,
+	//stat,
+	//fsync,
+	//ioctl
+};
+
+int char_arr_init (void)
+{
+	int ret;
+	dev_t dev_no, dev;
+	kernel_cdev = cdev_alloc();
+	kernel_cdev->ops = &fops;
+	kernel_cdev->owner = THIS_MODULE;
+
+	printk(" Inside init module\n");
+	ret = alloc_chrdev_region( &dev_no, 0, 1, "chr_arr_dev");
+	if (ret < 0)
+	{
+		printk("Major number allocation is failed\n");
+		return ret;
+	}
+
+	Major = MAJOR(dev_no);
+	dev = MKDEV(Major, 0); 
+	sema_init(&char_arr.sem, 1); //Initialize the semaphor
+
+	printk(" The major number for your device is %d\n", Major);
+	ret = cdev_add ( kernel_cdev, dev, 1);
+	if (ret < 0 )
+	{
+		printk(KERN_INFO "Unable to allocate cdev");
+		return ret;
+	}
+	return 0;
 }
 
-module_init(union_station_init);
-module_exit(union_station_exit);
+static void __exit char_arr_cleanup(void)
+{
+
+	printk(KERN_INFO " Inside cleanup_module\n");
+	up(&char_arr.sem);
+	cdev_del(kernel_cdev);
+	unregister_chrdev_region(Major, 1);
+}
+
+static void __exit char_arr_exit(void)
+{
+
+	printk(KERN_INFO " Inside cleanup_module\n");
+	cdev_del(kernel_cdev);
+	unregister_chrdev_region(Major, 1);
+}
 
 MODULE_LICENSE("GPL");
 
+module_init(char_arr_init);
+module_exit(char_arr_exit);
+static void module_cleanup(char_arr_cleanup);
 
-
-/* Lazy initialization  
-   buffer file info to cache 
-   the data you need
-   look at open()
-   all of the callbacks
-*/
