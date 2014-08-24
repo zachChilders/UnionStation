@@ -31,7 +31,6 @@ void main(void)
 		case 'r':
 			ret = read(fd, &readInt, sizeof(int));
 			printf("The data in the device is %d\n", readInt );
-			printf("Return value %d, %d\n", ret, errno);
 			break;
 		default:
 			printf("Wrong choice\n");

@@ -6,6 +6,11 @@
 
 #include <linux/semaphore.h>
 #include <linux/cdev.h>
+#include <linux/kthread.h>
+
+#include <asm/segment.h>
+#include <linux/buffer_head.h>
+
 static int Major;
 
 struct device
@@ -17,11 +22,16 @@ struct device
 	struct semaphore sem;
 }char_arr;
 
+void math(int a)
+{
+	printk(KERN_INFO "In math thread");
+	char_arr.result =  a + a;
+}
 
 //Grab the semaphore
 int open(struct inode *inode, struct file *filp)
 {
-	if (down_interruptible(&char_arr.sem)) //Try to hold the sema/phore
+	if (down_interruptible(&char_arr.sem)) //Try to hold the semaphore
 	{
 		printk(KERN_INFO " could not hold semaphore.");
 		return -1;
@@ -36,7 +46,9 @@ ssize_t read( struct file *filp, int* buff, size_t count, loff_t* offset)
 {
 	unsigned long ret;
 	printk("Inside read \n");
-	char_arr.result = char_arr.one + char_arr.two;
+	//char_arr.result = math(char_arr.one, char_arr.two);
+	struct task_struct *thread = kthread_create(math, char_arr.one, "THREADasdf");
+	wake_up_process(thread);
 	printk("Result: %d \n", char_arr.result);
 	ret = copy_to_user(buff, &char_arr.result, count);
 	return ret;
